@@ -119,8 +119,6 @@ static void task_oled(void *pv) {
                      (unsigned long)modbus_bridge_rs485_count());
             SSD1306_DrawString(0, 32, buf, &Font_6x8, 1);
 
-            snprintf(buf, sizeof(buf), "ERR:%lu", (unsigned long)can_bridge_err_count());
-            SSD1306_DrawString(0, 44, buf, &Font_6x8, 1);
         } else {
             snprintf(buf, sizeof(buf), "PC>485: %lu", (unsigned long)modbus_bridge_pc_count());
             SSD1306_DrawString(0, 20, buf, &Font_6x8, 1);
@@ -129,12 +127,11 @@ static void task_oled(void *pv) {
             SSD1306_DrawString(0, 32, buf, &Font_6x8, 1);
         }
 
-        SSD1306_DrawString(0, 56, "BTN=mode", &Font_6x8, 1);
-
         static const char* bauds[] = {"9.6k","19.2k","38.4k","57.6k","115k","230k","460k"};
         uint8_t bi = modbus_bridge_get_baud_idx();
         snprintf(buf, sizeof(buf), "PC:460k RS485:%s", bi < 7 ? bauds[bi] : "?");
-        SSD1306_DrawString(0, 40, buf, &Font_6x8, 1);
+        SSD1306_DrawString(0, 44, buf, &Font_6x8, 1);
+        SSD1306_DrawString(0, 56, "BTN=mode", &Font_6x8, 1);
 
         LL_GPIO_TogglePin(GPIOA, LL_GPIO_PIN_5);
         SSD1306_UpdateScreen();
