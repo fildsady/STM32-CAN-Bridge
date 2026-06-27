@@ -22,6 +22,9 @@
 
 void modbus_bridge_init(uint32_t baudrate);
 void modbus_bridge_poll(void);
+void modbus_bridge_relay(void);
+uint32_t modbus_bridge_pc_count(void);
+uint32_t modbus_bridge_rs485_count(void);
 
 /* Send raw Modbus frame (from PC pass-through) */
 void modbus_bridge_send_raw(const uint8_t *data, uint16_t len);

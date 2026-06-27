@@ -71,17 +71,35 @@ static void task_bridge(void *pv) {
     const char *msg = "[Bridge] F446RE CAN+Modbus+UART ready\r\n";
     uart_write((const uint8_t *)msg, strlen(msg));
 
+    for (;;) {
+        modbus_bridge_relay();
+        vTaskDelay(1);
+    }
+}
+
+static void task_oled(void *pv) {
+    (void)pv;
+    char buf[22];
+
     SSD1306_Clear();
     SSD1306_DrawString(0, 0, "STM32-CAN-Bridge", &Font_6x8, 1);
-    SSD1306_DrawString(0, 12, "CAN:125k  MB:115200", &Font_6x8, 1);
+    SSD1306_DrawString(0, 12, "Modbus Relay", &Font_6x8, 1);
     SSD1306_DrawString(0, 24, "Ready.", &Font_6x8, 1);
     SSD1306_UpdateScreen();
 
     for (;;) {
-        can_bridge_poll();
-        modbus_bridge_poll();
+        SSD1306_Clear();
+        SSD1306_DrawString(0, 0, "STM32-CAN-Bridge", &Font_6x8, 1);
+
+        snprintf(buf, sizeof(buf), "PC>485: %lu", (unsigned long)modbus_bridge_pc_count());
+        SSD1306_DrawString(0, 16, buf, &Font_6x8, 1);
+
+        snprintf(buf, sizeof(buf), "485>PC: %lu", (unsigned long)modbus_bridge_rs485_count());
+        SSD1306_DrawString(0, 28, buf, &Font_6x8, 1);
+
         LL_GPIO_TogglePin(GPIOA, LL_GPIO_PIN_5);
-        vTaskDelay(pdMS_TO_TICKS(1));
+        SSD1306_UpdateScreen();
+        vTaskDelay(pdMS_TO_TICKS(200));
     }
 }
 
@@ -91,7 +109,8 @@ int main(void) {
     led_init();
     SSD1306_Init();
 
-    xTaskCreate(task_bridge, "bridge", 2048, NULL, 2, NULL);
+    xTaskCreate(task_bridge, "bridge", 2048, NULL, 3, NULL);  /* high priority — relay must not be blocked */
+    xTaskCreate(task_oled,  "oled",   1024, NULL, 1, NULL);  /* low priority */
     vTaskStartScheduler();
 
     while (1) {}
