@@ -29,7 +29,7 @@
 #include <stdio.h>
 #include <string.h>
 
-volatile bool g_gateway_mode = false;
+volatile bool g_gateway_mode = true;
 
 void SystemClock_Config(void) {
     LL_RCC_HSE_Enable();
