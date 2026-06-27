@@ -1,0 +1,61 @@
+{
+    "version": "2.0.0",
+    "tasks": [
+        {
+            "label": "CMake Configure",
+            "type": "shell",
+            "command": "cmake",
+            "args": [
+                "-B", "build",
+                "-G", "Ninja",
+                "-DCMAKE_TOOLCHAIN_FILE=cmake/gnu-tools-for-stm32.cmake",
+                "-DCMAKE_BUILD_TYPE=Debug"
+            ],
+            "options": {
+                "env": {
+                    "PATH": "C:\\ST\\STM32CubeCLT_1.21.0\\GNU-tools-for-STM32\\bin;${env:PATH}"
+                }
+            },
+            "group": "build",
+            "problemMatcher": []
+        },
+        {
+            "label": "Build",
+            "type": "shell",
+            "command": "ninja",
+            "args": [],
+            "options": {
+                "cwd": "${workspaceFolder}/build",
+                "env": {
+                    "PATH": "C:\\ST\\STM32CubeCLT_1.21.0\\GNU-tools-for-STM32\\bin;${env:PATH}"
+                }
+            },
+            "group": {
+                "kind": "build",
+                "isDefault": true
+            },
+            "problemMatcher": "$gcc"
+        },
+        {
+            "label": "Flash",
+            "type": "shell",
+            "command": "C:\\ST\\STM32CubeCLT_1.21.0\\STM32CubeProgrammer\\bin\\STM32_Programmer_CLI.exe",
+            "args": [
+                "-c", "port=SWD",
+                "-w", "${workspaceFolder}/build/STM32-CAN-Bridge.bin", "0x08000000",
+                "-v",
+                "-rst"
+            ],
+            "group": "test",
+            "problemMatcher": [],
+            "dependsOn": "Build"
+        },
+        {
+            "label": "Build + Flash",
+            "dependsOn": ["Build", "Flash"],
+            "dependsOrder": "sequence",
+            "group": "test",
+            "problemMatcher": []
+        }
+    ]
+}
