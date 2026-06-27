@@ -23,6 +23,7 @@
 
 #include "can_bridge.h"
 #include "modbus_bridge.h"
+#include "flash_config.h"
 #include "uart_io.h"
 #include "ssd1306.h"
 
@@ -75,9 +76,16 @@ static void hw_init(void) {
 static void task_bridge(void *pv) {
     (void)pv;
 
+    eeprom_init();
+    uint8_t mb_idx = eeprom_read_u8(CFG_KEY_MB_BAUD, 4);
+    uint8_t can_idx = eeprom_read_u8(CFG_KEY_CAN_BAUD, 2);
+    static const uint32_t mb_bauds[] = {9600,19200,38400,57600,115200,230400,460800};
     uart_init(921600);
-    can_bridge_init(CAN_BAUD_125K);
-    modbus_bridge_init(115200);
+    can_bridge_init(can_idx);
+    modbus_bridge_init(mb_idx < 7 ? mb_bauds[mb_idx] : 115200);
+    /* Boot count */
+    uint32_t bc = eeprom_read_boot_count() + 1;
+    eeprom_write_u8(CFG_KEY_BOOT_COUNT, 0); /* placeholder — real boot count in compact */
 
     for (;;) {
         if (g_gateway_mode) {
@@ -128,9 +136,10 @@ static void task_oled(void *pv) {
         }
 
         static const char* mbaud[] = {"9.6k","19.2k","38.4k","57.6k","115k","230k","460k"};
-        static const char* cbaud[] = {"125k","250k","500k","1M"};
-        uint8_t bi = modbus_bridge_get_baud_idx();
-        snprintf(buf, sizeof(buf), "MB:%s CAN:%s", bi < 7 ? mbaud[bi] : "?", cbaud[0]);
+        static const char* cbaud[] = {"20k","50k","125k","250k","500k","1M"};
+        uint8_t mbi = modbus_bridge_get_baud_idx();
+        uint8_t cbi = can_bridge_get_baud_idx();
+        snprintf(buf, sizeof(buf), "MB:%s CAN:%s", mbi < 7 ? mbaud[mbi] : "?", cbi < 6 ? cbaud[cbi] : "?");
         SSD1306_DrawString(0, 44, buf, &Font_6x8, 1);
         SSD1306_DrawString(0, 56, "PC:921k  BTN=mode", &Font_6x8, 1);
 

@@ -31,12 +31,29 @@ static volatile uint8_t s_rx_ring_tail = 0;
 
 /* Baud rate prescaler table (APB1 = 45MHz, 15 TQ per bit) */
 static const struct { uint16_t prescaler; uint32_t baud; } s_baud_table[] = {
-    { 24, 125000  },
-    { 12, 250000  },
-    {  6, 500000  },
-    {  3, 1000000 },
+    { 150, 20000   },   /* 0: 20k */
+    {  60, 50000   },   /* 1: 50k */
+    {  24, 125000  },   /* 2: 125k */
+    {  12, 250000  },   /* 3: 250k */
+    {   6, 500000  },   /* 4: 500k */
+    {   3, 1000000 },   /* 5: 1M */
 };
-#define BAUD_COUNT (sizeof(s_baud_table) / sizeof(s_baud_table[0]))
+#define CAN_BAUD_COUNT (sizeof(s_baud_table) / sizeof(s_baud_table[0]))
+static uint8_t s_can_baud_idx = 2;
+
+uint8_t can_bridge_get_baud_idx(void) { return s_can_baud_idx; }
+
+void can_bridge_set_baud(uint8_t idx) {
+    if (idx >= CAN_BAUD_COUNT) return;
+    s_can_baud_idx = idx;
+    /* Re-init CAN with new baud */
+    CAN1->MCR |= CAN_MCR_INRQ;
+    while (!(CAN1->MSR & CAN_MSR_INAK)) {}
+    CAN1->BTR = ((1 - 1) << 24) | ((2 - 1) << 20) | ((12 - 1) << 16) |
+                (s_baud_table[idx].prescaler - 1);
+    CAN1->MCR &= ~CAN_MCR_INRQ;
+    while (CAN1->MSR & CAN_MSR_INAK) {}
+}
 
 static void can_gpio_init(void) {
     LL_AHB1_GRP1_EnableClock(LL_AHB1_GRP1_PERIPH_GPIOA);
@@ -49,7 +66,8 @@ static void can_gpio_init(void) {
 }
 
 void can_bridge_init(uint8_t baud_idx) {
-    if (baud_idx >= BAUD_COUNT) baud_idx = 0;
+    if (baud_idx >= CAN_BAUD_COUNT) baud_idx = 2;
+    s_can_baud_idx = baud_idx;
     can_gpio_init();
 
     RCC->APB1ENR |= RCC_APB1ENR_CAN1EN;

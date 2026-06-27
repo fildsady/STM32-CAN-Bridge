@@ -23,6 +23,8 @@ set(sources_SRCS
     ${CMAKE_CURRENT_SOURCE_DIR}/Src/uart_io.c
     ${CMAKE_CURRENT_SOURCE_DIR}/Src/modbus_bridge.c
     ${CMAKE_CURRENT_SOURCE_DIR}/Src/ssd1306.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/Src/flash_config.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/Src/fault_handler.c
     ${CMAKE_CURRENT_SOURCE_DIR}/Src/startup_stm32f446xx.S
     ${CMAKE_CURRENT_SOURCE_DIR}/Src/syscall.c
     ${CMAKE_CURRENT_SOURCE_DIR}/Src/sysmem.c

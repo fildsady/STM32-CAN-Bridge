@@ -8,6 +8,8 @@
  * No polling, no silence timer, hardware handles framing
  */
 #include "modbus_bridge.h"
+#include "flash_config.h"
+#include "can_bridge.h"
 #include "uart_io.h"
 #include "stm32f4xx.h"
 #include "stm32f4xx_ll_bus.h"
@@ -185,7 +187,16 @@ void modbus_bridge_relay(void) {
         if (s_pc_frame_len >= 4 && s_pc_dma_buf[0] == 0xFE && s_pc_dma_buf[1] == 0xFE) {
             uint8_t cmd = s_pc_dma_buf[2];
             uint8_t val = s_pc_dma_buf[3];
-            if (cmd == 0x01) set_usart1_baud(val);
+            if (cmd == 0x01) { set_usart1_baud(val); eeprom_write_u8(CFG_KEY_MB_BAUD, val); }
+            if (cmd == 0x02) { can_bridge_set_baud(val); eeprom_write_u8(CFG_KEY_CAN_BAUD, val); }
+            if (cmd == 0x10) {
+                fault_entry_t faults[50];
+                uint16_t fc = eeprom_read_faults(faults, 50);
+                uint8_t pkt[4 + 50 * sizeof(fault_entry_t)];
+                pkt[0] = 0xFE; pkt[1] = 0xFE; pkt[2] = 0x10; pkt[3] = (uint8_t)fc;
+                memcpy(&pkt[4], faults, fc * sizeof(fault_entry_t));
+                uart_write(pkt, 4 + fc * sizeof(fault_entry_t));
+            }
             s_pc_frame_ready = false;
         }
     }
@@ -226,8 +237,19 @@ void modbus_bridge_poll(void) {
         uint16_t len = s_pc_frame_len;
 
         /* Bridge config: [0xFE, 0xFE, cmd, val] */
-        if (len >= 4 && frame[0] == 0xFE && frame[1] == 0xFE) {
-            if (frame[2] == 0x01) set_usart1_baud(frame[3]);
+        if (len >= 3 && frame[0] == 0xFE && frame[1] == 0xFE) {
+            uint8_t cmd = frame[2];
+            uint8_t val = len >= 4 ? frame[3] : 0;
+            if (cmd == 0x01) { set_usart1_baud(val); eeprom_write_u8(CFG_KEY_MB_BAUD, val); }
+            if (cmd == 0x02) { can_bridge_set_baud(val); eeprom_write_u8(CFG_KEY_CAN_BAUD, val); }
+            if (cmd == 0x10) {
+                fault_entry_t faults[50];
+                uint16_t fc = eeprom_read_faults(faults, 50);
+                uint8_t pkt[4 + 50 * sizeof(fault_entry_t)];
+                pkt[0] = 0xFE; pkt[1] = 0xFE; pkt[2] = 0x10; pkt[3] = (uint8_t)fc;
+                memcpy(&pkt[4], faults, fc * sizeof(fault_entry_t));
+                uart_write(pkt, 4 + fc * sizeof(fault_entry_t));
+            }
             s_pc_frame_ready = false;
             return;
         }
