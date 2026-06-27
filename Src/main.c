@@ -97,6 +97,11 @@ static void task_oled(void *pv) {
         snprintf(buf, sizeof(buf), "485>PC: %lu", (unsigned long)modbus_bridge_rs485_count());
         SSD1306_DrawString(0, 28, buf, &Font_6x8, 1);
 
+        static const char* bauds[] = {"9600","19200","38400","57600","115200","230400","460800"};
+        uint8_t bi = modbus_bridge_get_baud_idx();
+        snprintf(buf, sizeof(buf), "Baud: %s", bi < 7 ? bauds[bi] : "?");
+        SSD1306_DrawString(0, 40, buf, &Font_6x8, 1);
+
         LL_GPIO_TogglePin(GPIOA, LL_GPIO_PIN_5);
         SSD1306_UpdateScreen();
         vTaskDelay(pdMS_TO_TICKS(200));

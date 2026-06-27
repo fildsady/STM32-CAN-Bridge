@@ -163,8 +163,33 @@ void modbus_bridge_usart2_idle(void) {
     LL_DMA_EnableStream(DMA1, LL_DMA_STREAM_5);
 }
 
+/* ── Baud rate table ──────────────────────────────────────────────────── */
+static const uint32_t s_baud_table[] = { 9600, 19200, 38400, 57600, 115200, 230400, 460800 };
+#define BAUD_COUNT 7
+static uint8_t s_baud_idx = 4;
+
+uint8_t modbus_bridge_get_baud_idx(void) { return s_baud_idx; }
+
+static void set_usart1_baud(uint8_t idx) {
+    if (idx >= BAUD_COUNT) return;
+    s_baud_idx = idx;
+    LL_USART_Disable(USART1);
+    LL_USART_SetBaudRate(USART1, SystemCoreClock / 2, LL_USART_OVERSAMPLING_16, s_baud_table[idx]);
+    LL_USART_Enable(USART1);
+}
+
 /* ── Relay task: forward complete frames ──────────────────────────────── */
 void modbus_bridge_relay(void) {
+    /* PC → RS-485: check for bridge config command (0xFE 0xFE) */
+    if (s_pc_frame_ready) {
+        if (s_pc_frame_len >= 4 && s_pc_dma_buf[0] == 0xFE && s_pc_dma_buf[1] == 0xFE) {
+            uint8_t cmd = s_pc_dma_buf[2];
+            uint8_t val = s_pc_dma_buf[3];
+            if (cmd == 0x01) set_usart1_baud(val);
+            s_pc_frame_ready = false;
+        }
+    }
+
     /* PC → RS-485: forward complete frame */
     if (s_pc_frame_ready) {
         rs485_tx(s_pc_dma_buf, s_pc_frame_len);
