@@ -15,6 +15,8 @@ Protocol compatible with PicoCANBridge / PicoCANGui.
 
 ### STM32 → Arduino Header (Nucleo-F446RE)
 
+![Nucleo-F446RE Pinout](docs/img/nucleo_f446re_pinout.png)
+
 | Function | STM32 Pin | Arduino Pin | Morpho Pin | หมายเหตุ |
 |----------|-----------|-------------|------------|----------|
 | USART2 TX | PA2 | D1 | CN10-35 | ST-Link VCP (ต่อให้แล้ว) |

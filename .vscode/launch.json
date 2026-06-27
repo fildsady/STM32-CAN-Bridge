@@ -6,7 +6,7 @@
             "type": "cortex-debug",
             "request": "launch",
             "servertype": "stlink",
-            "executable": "${workspaceFolder}/build/STM32-CAN-Bridge.elf",
+            "executable": "${workspaceFolder}/build/Debug/STM32-CAN-Bridge.elf",
             "device": "STM32F446RE",
             "runToEntryPoint": "main",
             "svdFile": "${workspaceFolder}/Drivers/CMSIS/Device/ST/STM32F4xx/Include/STM32F446.svd",
@@ -18,7 +18,7 @@
             "type": "cortex-debug",
             "request": "launch",
             "servertype": "stlink",
-            "executable": "${workspaceFolder}/build/STM32-CAN-Bridge.elf",
+            "executable": "${workspaceFolder}/build/Debug/STM32-CAN-Bridge.elf",
             "device": "STM32F446RE",
             "preLaunchTask": "Build + Flash",
             "armToolchainPath": "C:\\ST\\STM32CubeCLT_1.21.0\\GNU-tools-for-STM32\\bin"
