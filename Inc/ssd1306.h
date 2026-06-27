@@ -1,20 +1,28 @@
-#pragma once
+#ifndef __SSD1306_H__
+#define __SSD1306_H__
+
 #include <stdint.h>
 #include <stdbool.h>
 #include "font.h"
 
-#define SSD1306_WIDTH   128
-#define SSD1306_HEIGHT   64
-#define SSD1306_BUF_SIZE (SSD1306_WIDTH * SSD1306_HEIGHT / 8)  /* 1024 */
+#define SSD1306_WIDTH       128
+#define SSD1306_HEIGHT      64
+#define SSD1306_BUFFER_SIZE (SSD1306_WIDTH * SSD1306_HEIGHT / 8)
 
-#define OLED_I2C_ADDR   0x3C
+#define SSD1306_COLOR_BLACK 0
+#define SSD1306_COLOR_WHITE 1
 
-void ssd1306_init(void);
-void ssd1306_clear(void);
-void ssd1306_update(void);
-bool ssd1306_busy(void);
 
-void ssd1306_draw_pixel(int x, int y, bool on);
-void ssd1306_draw_char(int x, int y, char ch, const FontDef *font);
-void ssd1306_draw_string(int x, int y, const char *str, const FontDef *font);
-void ssd1306_draw_hline(int x, int y, int w);
+uint8_t SSD1306_Init(void);
+void    SSD1306_Clear(void);
+void    SSD1306_UpdateScreen(void);
+uint8_t SSD1306_IsBusy(void);
+
+void SSD1306_DrawPixel   (int16_t x, int16_t y, uint8_t color);
+void SSD1306_DrawChar    (int16_t x, int16_t y, char ch,        const FontDef *font, uint8_t color);
+void SSD1306_DrawString  (int16_t x, int16_t y, const char *str, const FontDef *font, uint8_t color);
+void SSD1306_DrawString2x(int16_t x, int16_t y, const char *str, const FontDef *font, uint8_t color);
+void SSD1306_FillRect    (int16_t x, int16_t y, int16_t w, int16_t h, uint8_t color);
+void SSD1306_InvertRect  (int16_t x, int16_t y, int16_t w, int16_t h);
+
+#endif /* __SSD1306_H__ */

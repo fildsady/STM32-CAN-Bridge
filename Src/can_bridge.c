@@ -1,21 +1,18 @@
 /*
- * can_bridge.c — CAN1 ↔ UART bridge (transparent pass-through)
+ * can_bridge.c — CAN1 ↔ UART bridge (register-level, no HAL)
  *
- * STM32F446RE CAN1: PB8=RX, PB9=TX (remap, avoid USB conflict on PA11/PA12)
+ * STM32F446RE CAN1: PA11=RX, PA12=TX
  * Transceiver: SN65HVD230 or TJA1050
- *
- * Protocol (same as PicoCANBridge):
- *   PC → Bridge: [0x01, ID_H, ID_L, DLC, data[0..7]]
- *   Bridge → PC: [0x02, ID_H, ID_L, DLC, data[0..7]]
  */
 #include "can_bridge.h"
 #include "uart_io.h"
 #include "stm32f4xx.h"
 #include "stm32f4xx_ll_bus.h"
 #include "stm32f4xx_ll_gpio.h"
+#include "FreeRTOS.h"
+#include "task.h"
 #include <string.h>
 
-static CAN_HandleTypeDef s_hcan;
 static volatile uint32_t s_tx_count = 0;
 static volatile uint32_t s_rx_count = 0;
 static volatile uint32_t s_err_count = 0;
@@ -32,14 +29,12 @@ static volatile can_frame_t s_rx_ring[RX_RING_SIZE];
 static volatile uint8_t s_rx_ring_head = 0;
 static volatile uint8_t s_rx_ring_tail = 0;
 
-/* Baud rate prescaler table (APB1 = 45MHz on F446RE @ 180MHz) */
-/* CAN bit time = prescaler * (1 + BS1 + BS2) / APB1_CLK            */
-/* BS1=12, BS2=2 → 15 TQ per bit                                     */
+/* Baud rate prescaler table (APB1 = 45MHz, 15 TQ per bit) */
 static const struct { uint16_t prescaler; uint32_t baud; } s_baud_table[] = {
-    { 24, 125000  },  /* 45MHz / 24 / 15 = 125k  */
-    { 12, 250000  },  /* 45MHz / 12 / 15 = 250k  */
-    {  6, 500000  },  /* 45MHz /  6 / 15 = 500k  */
-    {  3, 1000000 },  /* 45MHz /  3 / 15 = 1M    */
+    { 24, 125000  },
+    { 12, 250000  },
+    {  6, 500000  },
+    {  3, 1000000 },
 };
 #define BAUD_COUNT (sizeof(s_baud_table) / sizeof(s_baud_table[0]))
 
@@ -61,81 +56,110 @@ void can_bridge_init(uint8_t baud_idx) {
 
     can_gpio_init();
 
-    __HAL_RCC_CAN1_CLK_ENABLE();
+    /* Enable CAN1 clock */
+    RCC->APB1ENR |= RCC_APB1ENR_CAN1EN;
 
-    s_hcan.Instance = CAN1;
-    s_hcan.Init.Prescaler = s_baud_table[baud_idx].prescaler;
-    s_hcan.Init.Mode = CAN_MODE_NORMAL;
-    s_hcan.Init.SyncJumpWidth = CAN_SJW_1TQ;
-    s_hcan.Init.TimeSeg1 = CAN_BS1_12TQ;
-    s_hcan.Init.TimeSeg2 = CAN_BS2_2TQ;
-    s_hcan.Init.TimeTriggeredMode = DISABLE;
-    s_hcan.Init.AutoBusOff = ENABLE;
-    s_hcan.Init.AutoWakeUp = ENABLE;
-    s_hcan.Init.AutoRetransmission = DISABLE;
-    s_hcan.Init.ReceiveFifoLocked = DISABLE;
-    s_hcan.Init.TransmitFifoPriority = DISABLE;
-    HAL_CAN_Init(&s_hcan);
+    /* Enter init mode */
+    CAN1->MCR |= CAN_MCR_INRQ;
+    while (!(CAN1->MSR & CAN_MSR_INAK)) {}
 
-    /* Accept all messages — no filter */
-    CAN_FilterTypeDef filter = {0};
-    filter.FilterBank = 0;
-    filter.FilterMode = CAN_FILTERMODE_IDMASK;
-    filter.FilterScale = CAN_FILTERSCALE_32BIT;
-    filter.FilterIdHigh = 0;
-    filter.FilterIdLow = 0;
-    filter.FilterMaskIdHigh = 0;
-    filter.FilterMaskIdLow = 0;
-    filter.FilterFIFOAssignment = CAN_RX_FIFO0;
-    filter.FilterActivation = ENABLE;
-    HAL_CAN_ConfigFilter(&s_hcan, &filter);
+    /* Exit sleep */
+    CAN1->MCR &= ~CAN_MCR_SLEEP;
 
-    /* Enable RX interrupt */
-    HAL_CAN_ActivateNotification(&s_hcan, CAN_IT_RX_FIFO0_MSG_PENDING);
+    /* Configure: no auto-retransmit, auto bus-off recovery, auto wakeup */
+    CAN1->MCR |= CAN_MCR_NART | CAN_MCR_ABOM | CAN_MCR_AWUM;
+
+    /* Bit timing: BS1=12TQ, BS2=2TQ, SJW=1TQ */
+    CAN1->BTR = ((1 - 1) << 24) |    /* SJW = 1TQ */
+                ((2 - 1) << 20) |    /* BS2 = 2TQ */
+                ((12 - 1) << 16) |   /* BS1 = 12TQ */
+                (s_baud_table[baud_idx].prescaler - 1);
+
+    /* Accept all — filter bank 0, mask mode, all pass */
+    CAN1->FMR |= CAN_FMR_FINIT;
+    CAN1->FA1R &= ~(1 << 0);
+    CAN1->sFilterRegister[0].FR1 = 0;
+    CAN1->sFilterRegister[0].FR2 = 0;
+    CAN1->FM1R &= ~(1 << 0);    /* mask mode */
+    CAN1->FS1R |= (1 << 0);     /* 32-bit scale */
+    CAN1->FFA1R &= ~(1 << 0);   /* assign to FIFO0 */
+    CAN1->FA1R |= (1 << 0);     /* activate filter 0 */
+    CAN1->FMR &= ~CAN_FMR_FINIT;
+
+    /* Enable FIFO0 message pending interrupt */
+    CAN1->IER |= CAN_IER_FMPIE0;
     NVIC_SetPriority(CAN1_RX0_IRQn, 5);
     NVIC_EnableIRQ(CAN1_RX0_IRQn);
 
-    HAL_CAN_Start(&s_hcan);
+    /* Leave init mode → normal */
+    CAN1->MCR &= ~CAN_MCR_INRQ;
+    while (CAN1->MSR & CAN_MSR_INAK) {}
 }
 
 /* CAN RX ISR → ring buffer */
 void CAN1_RX0_IRQHandler(void) {
-    CAN_RxHeaderTypeDef hdr;
-    uint8_t data[8];
+    while (CAN1->RF0R & CAN_RF0R_FMP0) {
+        uint8_t next = (s_rx_ring_head + 1) % RX_RING_SIZE;
+        if (next != s_rx_ring_tail) {
+            uint32_t rir = CAN1->sFIFOMailBox[0].RIR;
+            s_rx_ring[s_rx_ring_head].id = (rir >> 21) & 0x7FF;
+            s_rx_ring[s_rx_ring_head].dlc = CAN1->sFIFOMailBox[0].RDTR & 0x0F;
+            if (s_rx_ring[s_rx_ring_head].dlc > 8) s_rx_ring[s_rx_ring_head].dlc = 8;
 
-    while (HAL_CAN_GetRxFifoFillLevel(&s_hcan, CAN_RX_FIFO0) > 0) {
-        if (HAL_CAN_GetRxMessage(&s_hcan, CAN_RX_FIFO0, &hdr, data) == HAL_OK) {
-            uint8_t next = (s_rx_ring_head + 1) % RX_RING_SIZE;
-            if (next != s_rx_ring_tail) {
-                s_rx_ring[s_rx_ring_head].id = hdr.StdId;
-                s_rx_ring[s_rx_ring_head].dlc = (uint8_t)hdr.DLC;
-                memcpy((void *)s_rx_ring[s_rx_ring_head].data, data, hdr.DLC);
-                s_rx_ring_head = next;
-            }
+            uint32_t rdlr = CAN1->sFIFOMailBox[0].RDLR;
+            uint32_t rdhr = CAN1->sFIFOMailBox[0].RDHR;
+            s_rx_ring[s_rx_ring_head].data[0] = (uint8_t)(rdlr);
+            s_rx_ring[s_rx_ring_head].data[1] = (uint8_t)(rdlr >> 8);
+            s_rx_ring[s_rx_ring_head].data[2] = (uint8_t)(rdlr >> 16);
+            s_rx_ring[s_rx_ring_head].data[3] = (uint8_t)(rdlr >> 24);
+            s_rx_ring[s_rx_ring_head].data[4] = (uint8_t)(rdhr);
+            s_rx_ring[s_rx_ring_head].data[5] = (uint8_t)(rdhr >> 8);
+            s_rx_ring[s_rx_ring_head].data[6] = (uint8_t)(rdhr >> 16);
+            s_rx_ring[s_rx_ring_head].data[7] = (uint8_t)(rdhr >> 24);
+
+            s_rx_ring_head = next;
             s_rx_count++;
         }
+        /* Release FIFO */
+        CAN1->RF0R |= CAN_RF0R_RFOM0;
     }
 }
 
 bool can_bridge_send(uint32_t id, const uint8_t *data, uint8_t dlc) {
-    CAN_TxHeaderTypeDef hdr = {0};
-    hdr.StdId = id & 0x7FF;
-    hdr.IDE = CAN_ID_STD;
-    hdr.RTR = CAN_RTR_DATA;
-    hdr.DLC = dlc > 8 ? 8 : dlc;
+    if (dlc > 8) dlc = 8;
 
-    uint32_t mailbox;
-    if (HAL_CAN_AddTxMessage(&s_hcan, &hdr, (uint8_t *)data, &mailbox) == HAL_OK) {
-        s_tx_count++;
-        return true;
-    }
-    s_err_count++;
-    return false;
+    /* Find empty TX mailbox */
+    uint32_t tsr = CAN1->TSR;
+    uint8_t mb;
+    if (tsr & CAN_TSR_TME0) mb = 0;
+    else if (tsr & CAN_TSR_TME1) mb = 1;
+    else if (tsr & CAN_TSR_TME2) mb = 2;
+    else { s_err_count++; return false; }
+
+    /* Set ID (standard, data frame) */
+    CAN1->sTxMailBox[mb].TIR = ((id & 0x7FF) << 21);
+
+    /* Set DLC */
+    CAN1->sTxMailBox[mb].TDTR = dlc;
+
+    /* Set data */
+    CAN1->sTxMailBox[mb].TDLR = (uint32_t)data[0] |
+                                 ((uint32_t)data[1] << 8) |
+                                 ((uint32_t)data[2] << 16) |
+                                 ((uint32_t)data[3] << 24);
+    CAN1->sTxMailBox[mb].TDHR = (uint32_t)data[4] |
+                                 ((uint32_t)data[5] << 8) |
+                                 ((uint32_t)data[6] << 16) |
+                                 ((uint32_t)data[7] << 24);
+
+    /* Request transmit */
+    CAN1->sTxMailBox[mb].TIR |= CAN_TI0R_TXRQ;
+    s_tx_count++;
+    return true;
 }
 
-/* Process UART RX → CAN TX, CAN RX ring → UART TX */
+/* UART → CAN, CAN RX ring → UART */
 void can_bridge_poll(void) {
-    /* UART → CAN: parse [0x01, ID_H, ID_L, DLC, data...] */
     static uint8_t uart_buf[80];
     static uint8_t uart_pos = 0;
 
@@ -163,6 +187,7 @@ void can_bridge_poll(void) {
             if (uart_pos >= sizeof(uart_buf)) uart_pos = 0;
             continue;
         }
+
         uart_buf[uart_pos++] = c;
 
         if (uart_pos >= 4) {
@@ -177,7 +202,7 @@ void can_bridge_poll(void) {
         if (uart_pos >= sizeof(uart_buf)) uart_pos = 0;
     }
 
-    /* CAN RX ring → UART: send [0x02, ID_H, ID_L, DLC, data...] */
+    /* CAN RX ring → UART */
     while (s_rx_ring_tail != s_rx_ring_head) {
         volatile can_frame_t *f = &s_rx_ring[s_rx_ring_tail];
         uint8_t pkt[12];

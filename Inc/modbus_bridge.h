@@ -17,7 +17,7 @@
 #define BRIDGE_CMD_MODBUS_TX  0x03
 #define BRIDGE_CMD_MODBUS_RX  0x04
 
-#define MODBUS_DE_PIN         GPIO_PIN_8
+#define MODBUS_DE_PIN         LL_GPIO_PIN_8
 #define MODBUS_DE_PORT        GPIOA
 
 void modbus_bridge_init(uint32_t baudrate);

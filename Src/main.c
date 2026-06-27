@@ -1,8 +1,9 @@
 /*
- * STM32-CAN-Bridge — UART ↔ CAN transparent gateway
+ * STM32-CAN-Bridge — UART ↔ CAN ↔ Modbus RS-485 gateway
  *
- * Nucleo-F446RE: USART2 (VCP via ST-Link) ↔ CAN1 (PB8/PB9)
- * Protocol compatible with PicoCANBridge (same frame format)
+ * Nucleo-F446RE: USART2 (VCP) ↔ CAN1 (PA11/PA12) ↔ USART1 RS-485 (PA9/PA10)
+ * OLED SSD1306 I2C1 (PB8/PB9 = D15/D14)
+ * All LL drivers — no HAL
  */
 #include "stm32f4xx.h"
 #include "stm32f4xx_ll_rcc.h"
@@ -19,6 +20,7 @@
 #include "can_bridge.h"
 #include "modbus_bridge.h"
 #include "uart_io.h"
+#include "ssd1306.h"
 
 #include <stdio.h>
 #include <string.h>
@@ -69,6 +71,12 @@ static void task_bridge(void *pv) {
     const char *msg = "[Bridge] F446RE CAN+Modbus+UART ready\r\n";
     uart_write((const uint8_t *)msg, strlen(msg));
 
+    SSD1306_Clear();
+    SSD1306_DrawString(0, 0, "STM32-CAN-Bridge", &Font_6x8, 1);
+    SSD1306_DrawString(0, 12, "CAN:125k  MB:115200", &Font_6x8, 1);
+    SSD1306_DrawString(0, 24, "Ready.", &Font_6x8, 1);
+    SSD1306_UpdateScreen();
+
     for (;;) {
         can_bridge_poll();
         modbus_bridge_poll();
@@ -79,16 +87,13 @@ static void task_bridge(void *pv) {
 
 int main(void) {
     SystemClock_Config();
+    LL_Init1msTick(180000000);
     led_init();
+    SSD1306_Init();
 
-    xTaskCreate(task_bridge, "bridge", 512, NULL, 2, NULL);
+    xTaskCreate(task_bridge, "bridge", 2048, NULL, 2, NULL);
     vTaskStartScheduler();
 
     while (1) {}
     return 0;
-}
-
-/* HAL needs this for CAN driver */
-uint32_t HAL_GetTick(void) {
-    return xTaskGetTickCount();
 }
