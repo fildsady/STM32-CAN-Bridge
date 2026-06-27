@@ -42,7 +42,7 @@ Supported FC: 03 (Read Holding), 06 (Write Single), 10 (Write Multiple).
 
 | Addr | Name | Description |
 |------|------|-------------|
-| 0x0020 | UPTIME | seconds since boot (wraps at 65535) |
+| 0x0020 | UPTIME | uptime seconds low 16-bit |
 | 0x0021 | TEMP_X10 | CPU temperature × 10 (e.g. 325 = 32.5°C) |
 | 0x0022 | FW_MAJOR | firmware version major |
 | 0x0023 | FW_MINOR | firmware version minor |
@@ -50,6 +50,7 @@ Supported FC: 03 (Read Holding), 06 (Write Single), 10 (Write Multiple).
 | 0x0025 | HEAP_FREE | free heap ÷ 16 (bytes) |
 | 0x0026 | SAMPLE_RATE | sample rate ÷ 100 (e.g. 441 = 44100 Hz) |
 | 0x0027 | BAUDRATE | baud index (RW): 0=9600, 1=19200, 2=38400, 3=57600, 4=115200, 5=230400, 6=460800 |
+| 0x0028 | UPTIME_HI | uptime seconds high 16-bit (combine: `(UPTIME_HI << 16) | UPTIME` = 32-bit seconds, max 136 years) |
 
 ### Snapshot Block (Read-Only, 0x0040–0x004B)
 
