@@ -225,6 +225,13 @@ void modbus_bridge_poll(void) {
         uint8_t *frame = s_pc_dma_buf;
         uint16_t len = s_pc_frame_len;
 
+        /* Bridge config: [0xFE, 0xFE, cmd, val] */
+        if (len >= 4 && frame[0] == 0xFE && frame[1] == 0xFE) {
+            if (frame[2] == 0x01) set_usart1_baud(frame[3]);
+            s_pc_frame_ready = false;
+            return;
+        }
+
         if (len >= 2 && frame[0] == 0x03) {
             /* 0x03 = Modbus TX pass-through: [0x03, len, raw...] */
             uint8_t mb_len = frame[1];
