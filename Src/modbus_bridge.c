@@ -22,9 +22,9 @@
 #define BUF_SIZE 256
 
 /* ── PC → RS-485 (USART2 RX DMA → USART1 TX) ────────────────────────── */
-static uint8_t s_pc_dma_buf[BUF_SIZE];
-static volatile uint16_t s_pc_frame_len = 0;
-static volatile bool s_pc_frame_ready = false;
+uint8_t s_pc_dma_buf[BUF_SIZE];
+volatile uint16_t s_pc_frame_len = 0;
+volatile bool s_pc_frame_ready = false;
 
 /* ── RS-485 → PC (USART1 RX DMA → USART2 TX) ────────────────────────── */
 static uint8_t s_rs_dma_buf[BUF_SIZE];
@@ -178,10 +178,50 @@ void modbus_bridge_relay(void) {
     }
 }
 
-/* ── Legacy API (unused in relay mode) ────────────────────────────────── */
+/* ── Mode switch ──────────────────────────────────────────────────────── */
+static volatile bool s_gateway_mode = false;
+
+void modbus_bridge_set_mode(bool gateway) {
+    s_gateway_mode = gateway;
+    /* Re-enable DMA RX for USART2 when switching back to relay */
+    if (!gateway) {
+        LL_DMA_DisableStream(DMA1, LL_DMA_STREAM_5);
+        LL_DMA_SetMemoryAddress(DMA1, LL_DMA_STREAM_5, (uint32_t)s_pc_dma_buf);
+        LL_DMA_SetDataLength(DMA1, LL_DMA_STREAM_5, BUF_SIZE);
+        LL_DMA_ClearFlag_TC5(DMA1);
+        LL_DMA_EnableStream(DMA1, LL_DMA_STREAM_5);
+    }
+}
+
+/* ── Gateway mode: protocol-based 0x03/0x04 ──────────────────────────── */
+void modbus_bridge_poll(void) {
+    /* Handle PC frame received via DMA+IDLE (same buffer as relay) */
+    if (s_pc_frame_ready) {
+        uint8_t *frame = s_pc_dma_buf;
+        uint16_t len = s_pc_frame_len;
+
+        if (len >= 2 && frame[0] == 0x03) {
+            /* 0x03 = Modbus TX pass-through: [0x03, len, raw...] */
+            uint8_t mb_len = frame[1];
+            if (mb_len <= len - 2) {
+                rs485_tx(&frame[2], mb_len);
+                s_pc_frames++;
+            }
+        }
+        s_pc_frame_ready = false;
+    }
+
+    /* Forward RS-485 response as [0x04, len, raw...] */
+    if (s_rs_frame_ready) {
+        uint8_t pkt[2 + BUF_SIZE];
+        pkt[0] = 0x04;
+        pkt[1] = (uint8_t)s_rs_frame_len;
+        memcpy(&pkt[2], s_rs_dma_buf, s_rs_frame_len);
+        uart_write(pkt, 2 + s_rs_frame_len);
+        s_rs_frame_ready = false;
+    }
+}
+
 void modbus_bridge_send_raw(const uint8_t *data, uint16_t len) {
     rs485_tx(data, len);
 }
-void modbus_bridge_poll(void) {}
-bool modbus_bridge_can_to_modbus(uint32_t can_id, const uint8_t *data, uint8_t dlc) { (void)can_id; (void)data; (void)dlc; return false; }
-bool modbus_bridge_poll_slave(uint8_t slave_id, uint8_t *out_data, uint8_t *out_len) { (void)slave_id; (void)out_data; (void)out_len; return false; }

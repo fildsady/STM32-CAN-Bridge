@@ -1,9 +1,13 @@
 /*
- * STM32-CAN-Bridge — UART ↔ CAN ↔ Modbus RS-485 gateway
+ * STM32-CAN-Bridge — Dual mode: Relay / Gateway
  *
  * Nucleo-F446RE: USART2 (VCP) ↔ CAN1 (PA11/PA12) ↔ USART1 RS-485 (PA9/PA10)
  * OLED SSD1306 I2C1 (PB8/PB9 = D15/D14)
+ * User button PC13 = toggle mode
  * All LL drivers — no HAL
+ *
+ * RELAY mode:   transparent UART↔RS-485 byte forwarding (DMA+IDLE)
+ * GATEWAY mode: protocol-based 0x01=CAN TX, 0x02=CAN RX, 0x03=Modbus TX, 0x04=Modbus RX
  */
 #include "stm32f4xx.h"
 #include "stm32f4xx_ll_rcc.h"
@@ -25,6 +29,8 @@
 #include <stdio.h>
 #include <string.h>
 
+volatile bool g_gateway_mode = false;
+
 void SystemClock_Config(void) {
     LL_RCC_HSE_Enable();
     while (LL_RCC_HSE_IsReady() != 1) {}
@@ -35,7 +41,6 @@ void SystemClock_Config(void) {
     LL_APB1_GRP1_EnableClock(LL_APB1_GRP1_PERIPH_PWR);
     LL_PWR_SetRegulVoltageScaling(LL_PWR_REGU_VOLTAGE_SCALE1);
 
-    /* HSE(8MHz) / 8 * 360 / 2 = 180MHz */
     LL_RCC_PLL_ConfigDomain_SYS(LL_RCC_PLLSOURCE_HSE, LL_RCC_PLLM_DIV_8, 360, LL_RCC_PLLP_DIV_2);
     LL_RCC_PLL_Enable();
     while (LL_RCC_PLL_IsReady() != 1) {}
@@ -46,7 +51,7 @@ void SystemClock_Config(void) {
     while (LL_PWR_IsActiveFlag_ODSW() != 1) {}
 
     LL_RCC_SetAHBPrescaler(LL_RCC_SYSCLK_DIV_1);
-    LL_RCC_SetAPB1Prescaler(LL_RCC_APB1_DIV_4);   /* APB1 = 45MHz */
+    LL_RCC_SetAPB1Prescaler(LL_RCC_APB1_DIV_4);
     LL_RCC_SetAPB2Prescaler(LL_RCC_APB2_DIV_2);
 
     LL_RCC_SetSysClkSource(LL_RCC_SYS_CLKSOURCE_PLL);
@@ -55,10 +60,16 @@ void SystemClock_Config(void) {
     LL_SetSystemCoreClock(180000000);
 }
 
-static void led_init(void) {
+static void hw_init(void) {
+    /* LED PA5 */
     LL_AHB1_GRP1_EnableClock(LL_AHB1_GRP1_PERIPH_GPIOA);
     LL_GPIO_SetPinMode(GPIOA, LL_GPIO_PIN_5, LL_GPIO_MODE_OUTPUT);
     LL_GPIO_SetPinSpeed(GPIOA, LL_GPIO_PIN_5, LL_GPIO_SPEED_FREQ_LOW);
+
+    /* User button PC13 (active low on Nucleo) */
+    LL_AHB1_GRP1_EnableClock(LL_AHB1_GRP1_PERIPH_GPIOC);
+    LL_GPIO_SetPinMode(GPIOC, LL_GPIO_PIN_13, LL_GPIO_MODE_INPUT);
+    LL_GPIO_SetPinPull(GPIOC, LL_GPIO_PIN_13, LL_GPIO_PULL_NO);
 }
 
 static void task_bridge(void *pv) {
@@ -68,11 +79,13 @@ static void task_bridge(void *pv) {
     can_bridge_init(CAN_BAUD_125K);
     modbus_bridge_init(115200);
 
-    const char *msg = "[Bridge] F446RE CAN+Modbus+UART ready\r\n";
-    uart_write((const uint8_t *)msg, strlen(msg));
-
     for (;;) {
-        modbus_bridge_relay();
+        if (g_gateway_mode) {
+            can_bridge_poll();
+            modbus_bridge_poll();
+        } else {
+            modbus_bridge_relay();
+        }
         vTaskDelay(1);
     }
 }
@@ -80,37 +93,58 @@ static void task_bridge(void *pv) {
 static void task_oled(void *pv) {
     (void)pv;
     char buf[22];
-
-    SSD1306_Clear();
-    SSD1306_DrawString(0, 0, "STM32-CAN-Bridge", &Font_6x8, 1);
-    SSD1306_DrawString(0, 12, "Modbus Relay", &Font_6x8, 1);
-    SSD1306_DrawString(0, 24, "Ready.", &Font_6x8, 1);
-    SSD1306_UpdateScreen();
+    bool last_btn = true;
 
     for (;;) {
+        /* Button debounce — PC13 active low */
+        bool btn = LL_GPIO_IsInputPinSet(GPIOC, LL_GPIO_PIN_13) == 0;
+        if (btn && !last_btn) {
+            g_gateway_mode = !g_gateway_mode;
+            modbus_bridge_set_mode(g_gateway_mode);
+        }
+        last_btn = btn;
+
+        /* Draw */
         SSD1306_Clear();
-        SSD1306_DrawString(0, 0, "STM32-CAN-Bridge", &Font_6x8, 1);
+        SSD1306_DrawString2x(0, 0, g_gateway_mode ? "GATEWAY" : "RELAY", &Font_6x8, 1);
 
-        snprintf(buf, sizeof(buf), "PC>485: %lu", (unsigned long)modbus_bridge_pc_count());
-        SSD1306_DrawString(0, 16, buf, &Font_6x8, 1);
+        if (g_gateway_mode) {
+            snprintf(buf, sizeof(buf), "CAN TX:%lu RX:%lu",
+                     (unsigned long)can_bridge_tx_count(),
+                     (unsigned long)can_bridge_rx_count());
+            SSD1306_DrawString(0, 20, buf, &Font_6x8, 1);
 
-        snprintf(buf, sizeof(buf), "485>PC: %lu", (unsigned long)modbus_bridge_rs485_count());
-        SSD1306_DrawString(0, 28, buf, &Font_6x8, 1);
+            snprintf(buf, sizeof(buf), "MB  TX:%lu RX:%lu",
+                     (unsigned long)modbus_bridge_pc_count(),
+                     (unsigned long)modbus_bridge_rs485_count());
+            SSD1306_DrawString(0, 32, buf, &Font_6x8, 1);
+
+            snprintf(buf, sizeof(buf), "ERR:%lu", (unsigned long)can_bridge_err_count());
+            SSD1306_DrawString(0, 44, buf, &Font_6x8, 1);
+        } else {
+            snprintf(buf, sizeof(buf), "PC>485: %lu", (unsigned long)modbus_bridge_pc_count());
+            SSD1306_DrawString(0, 20, buf, &Font_6x8, 1);
+
+            snprintf(buf, sizeof(buf), "485>PC: %lu", (unsigned long)modbus_bridge_rs485_count());
+            SSD1306_DrawString(0, 32, buf, &Font_6x8, 1);
+        }
+
+        SSD1306_DrawString(0, 56, "BTN=mode", &Font_6x8, 1);
 
         LL_GPIO_TogglePin(GPIOA, LL_GPIO_PIN_5);
         SSD1306_UpdateScreen();
-        vTaskDelay(pdMS_TO_TICKS(200));
+        vTaskDelay(pdMS_TO_TICKS(100));
     }
 }
 
 int main(void) {
     SystemClock_Config();
     LL_Init1msTick(180000000);
-    led_init();
+    hw_init();
     SSD1306_Init();
 
-    xTaskCreate(task_bridge, "bridge", 2048, NULL, 3, NULL);  /* high priority — relay must not be blocked */
-    xTaskCreate(task_oled,  "oled",   1024, NULL, 1, NULL);  /* low priority */
+    xTaskCreate(task_bridge, "bridge", 2048, NULL, 3, NULL);
+    xTaskCreate(task_oled,  "oled",   1024, NULL, 1, NULL);
     vTaskStartScheduler();
 
     while (1) {}

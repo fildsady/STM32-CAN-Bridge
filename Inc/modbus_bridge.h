@@ -23,6 +23,7 @@
 void modbus_bridge_init(uint32_t baudrate);
 void modbus_bridge_poll(void);
 void modbus_bridge_relay(void);
+void modbus_bridge_set_mode(bool gateway);
 uint32_t modbus_bridge_pc_count(void);
 uint32_t modbus_bridge_rs485_count(void);
 
