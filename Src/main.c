@@ -17,6 +17,7 @@
 #include "task.h"
 
 #include "can_bridge.h"
+#include "modbus_bridge.h"
 #include "uart_io.h"
 
 #include <stdio.h>
@@ -63,13 +64,14 @@ static void task_bridge(void *pv) {
 
     uart_init(115200);
     can_bridge_init(CAN_BAUD_125K);
+    modbus_bridge_init(115200);
 
-    /* Boot message */
-    const char *msg = "[CAN-Bridge] Nucleo-F446RE, CAN1 125k, UART 115200\r\n";
+    const char *msg = "[Bridge] F446RE CAN+Modbus+UART ready\r\n";
     uart_write((const uint8_t *)msg, strlen(msg));
 
     for (;;) {
         can_bridge_poll();
+        modbus_bridge_poll();
         LL_GPIO_TogglePin(GPIOA, LL_GPIO_PIN_5);
         vTaskDelay(pdMS_TO_TICKS(1));
     }

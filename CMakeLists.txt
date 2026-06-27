@@ -21,6 +21,7 @@ set(sources_SRCS
     ${CMAKE_CURRENT_SOURCE_DIR}/Src/main.c
     ${CMAKE_CURRENT_SOURCE_DIR}/Src/can_bridge.c
     ${CMAKE_CURRENT_SOURCE_DIR}/Src/uart_io.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/Src/modbus_bridge.c
     ${CMAKE_CURRENT_SOURCE_DIR}/Src/ssd1306.c
     ${CMAKE_CURRENT_SOURCE_DIR}/Src/startup_stm32f446xx.S
     ${CMAKE_CURRENT_SOURCE_DIR}/Src/syscall.c

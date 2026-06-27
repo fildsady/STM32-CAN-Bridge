@@ -136,13 +136,33 @@ bool can_bridge_send(uint32_t id, const uint8_t *data, uint8_t dlc) {
 /* Process UART RX → CAN TX, CAN RX ring → UART TX */
 void can_bridge_poll(void) {
     /* UART → CAN: parse [0x01, ID_H, ID_L, DLC, data...] */
-    static uint8_t uart_buf[16];
+    static uint8_t uart_buf[80];
     static uint8_t uart_pos = 0;
 
     while (uart_available() > 0) {
         uint8_t c = uart_read_byte();
 
-        if (uart_pos == 0 && c != BRIDGE_CMD_CAN_TX) continue;
+        if (uart_pos == 0 && c != BRIDGE_CMD_CAN_TX && c != 0x03) continue;
+
+        /* Modbus pass-through: [0x03, len, raw_frame...] */
+        if (uart_pos == 0 && c == 0x03) {
+            uart_buf[uart_pos++] = c;
+            continue;
+        }
+        if (uart_buf[0] == 0x03) {
+            uart_buf[uart_pos++] = c;
+            if (uart_pos >= 2) {
+                uint8_t mb_len = uart_buf[1];
+                if (mb_len > 64) { uart_pos = 0; continue; }
+                if (uart_pos >= (uint8_t)(2 + mb_len)) {
+                    extern void modbus_bridge_send_raw(const uint8_t *data, uint16_t len);
+                    modbus_bridge_send_raw(&uart_buf[2], mb_len);
+                    uart_pos = 0;
+                }
+            }
+            if (uart_pos >= sizeof(uart_buf)) uart_pos = 0;
+            continue;
+        }
         uart_buf[uart_pos++] = c;
 
         if (uart_pos >= 4) {
