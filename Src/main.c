@@ -75,7 +75,7 @@ static void hw_init(void) {
 static void task_bridge(void *pv) {
     (void)pv;
 
-    uart_init(460800);
+    uart_init(921600);
     can_bridge_init(CAN_BAUD_125K);
     modbus_bridge_init(115200);
 
@@ -127,11 +127,12 @@ static void task_oled(void *pv) {
             SSD1306_DrawString(0, 32, buf, &Font_6x8, 1);
         }
 
-        static const char* bauds[] = {"9.6k","19.2k","38.4k","57.6k","115k","230k","460k"};
+        static const char* mbaud[] = {"9.6k","19.2k","38.4k","57.6k","115k","230k","460k"};
+        static const char* cbaud[] = {"125k","250k","500k","1M"};
         uint8_t bi = modbus_bridge_get_baud_idx();
-        snprintf(buf, sizeof(buf), "PC:460k RS485:%s", bi < 7 ? bauds[bi] : "?");
+        snprintf(buf, sizeof(buf), "MB:%s CAN:%s", bi < 7 ? mbaud[bi] : "?", cbaud[0]);
         SSD1306_DrawString(0, 44, buf, &Font_6x8, 1);
-        SSD1306_DrawString(0, 56, "BTN=mode", &Font_6x8, 1);
+        SSD1306_DrawString(0, 56, "PC:921k  BTN=mode", &Font_6x8, 1);
 
         LL_GPIO_TogglePin(GPIOA, LL_GPIO_PIN_5);
         SSD1306_UpdateScreen();
