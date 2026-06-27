@@ -30,9 +30,9 @@ static void i2c_hw_init(void) {
     __HAL_RCC_I2C1_CLK_ENABLE();
     __HAL_RCC_DMA1_CLK_ENABLE();
 
-    /* PB6 = SCL, PB7 = SDA → AF4 (I2C1) */
+    /* PB8 = SCL (D15), PB9 = SDA (D14) → AF4 (I2C1) */
     GPIO_InitTypeDef gpio = {0};
-    gpio.Pin = GPIO_PIN_6 | GPIO_PIN_7;
+    gpio.Pin = GPIO_PIN_8 | GPIO_PIN_9;
     gpio.Mode = GPIO_MODE_AF_OD;
     gpio.Pull = GPIO_PULLUP;
     gpio.Speed = GPIO_SPEED_FREQ_HIGH;

@@ -17,38 +17,29 @@ Protocol compatible with PicoCANBridge / PicoCANGui.
 
 | Function | STM32 Pin | Arduino Pin | Morpho Pin | หมายเหตุ |
 |----------|-----------|-------------|------------|----------|
-| USART2 TX | PA2 | **A7** (D1) | CN10-35 | ST-Link VCP (ต่อให้แล้ว) |
-| USART2 RX | PA3 | **A2** (D0) | CN10-37 | ST-Link VCP (ต่อให้แล้ว) |
-| CAN1 RX | PB8 | **D15** | CN10-3 | ต่อ SN65HVD230 RXD |
-| CAN1 TX | PB9 | **D14** | CN10-5 | ต่อ SN65HVD230 TXD |
-| I2C1 SCL | PB6 | **D10** | CN10-17 | ต่อ OLED SCL |
-| I2C1 SDA | PB7 | **D9** (ไม่มีบน Arduino header) | CN7-21 | ต่อ OLED SDA |
+| USART2 TX | PA2 | D1 | CN10-35 | ST-Link VCP (ต่อให้แล้ว) |
+| USART2 RX | PA3 | D0 | CN10-37 | ST-Link VCP (ต่อให้แล้ว) |
+| I2C1 SCL | PB8 | **D15** | CN10-3 | ต่อ OLED SCL (ตามที่เขียนบนบอร์ด) |
+| I2C1 SDA | PB9 | **D14** | CN10-5 | ต่อ OLED SDA (ตามที่เขียนบนบอร์ด) |
+| CAN1 RX | PA11 | — | CN10-14 | ต่อ SN65HVD230 RXD |
+| CAN1 TX | PA12 | — | CN10-12 | ต่อ SN65HVD230 TXD |
 | LED | PA5 | **D13** | CN10-11 | LED บนบอร์ด |
 | User Button | PC13 | — | CN7-23 | กดติดดิน |
 
-### Morpho Connector (pin ที่ไม่อยู่บน Arduino header)
-
-```
-CN7 (ซ้าย)                    CN10 (ขวา)
- Pin 21 = PB7 (I2C1_SDA)       Pin 3  = PB8 (CAN1_RX)
-                                Pin 5  = PB9 (CAN1_TX)
-                                Pin 17 = PB6 (I2C1_SCL)
-```
-
-**หมายเหตุ:** PB7 (I2C1_SDA) ไม่อยู่บน Arduino header — ต้องใช้ Morpho connector CN7 pin 21
+**หมายเหตุ:** OLED ใช้ D14/D15 ตามที่พิมพ์บนบอร์ด, CAN ย้ายไป PA11/PA12 (Morpho CN10-12/14)
 
 ## Wiring Diagram
 
 ```
 Nucleo F446RE              SN65HVD230            SSD1306 OLED
-  D14/PB9 (CAN1_TX) ────── TXD                 
-  D15/PB8 (CAN1_RX) ────── RXD                 
+  PA12 (CAN1_TX) ────────── TXD                 
+  PA11 (CAN1_RX) ────────── RXD                 
   3V3 ─────────────────── VCC              ──── VCC
   GND ─────────────────── GND              ──── GND
                            CANH ──── Bus
                            CANL ──── Bus
-  D10/PB6 (I2C1_SCL) ─────────────────────────── SCL
-  CN7-21/PB7 (I2C1_SDA) ──────────────────────── SDA
+  D15/PB8 (I2C1_SCL) ─────────────────────────── SCL
+  D14/PB9 (I2C1_SDA) ─────────────────────────── SDA
 
   [USB] ST-Link ←→ PC (COM port อัตโนมัติ)
   [D13/PA5] LED กระพริบ = bridge ทำงาน
