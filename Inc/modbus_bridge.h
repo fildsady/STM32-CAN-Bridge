@@ -27,6 +27,7 @@ void modbus_bridge_set_mode(bool gateway);
 uint32_t modbus_bridge_pc_count(void);
 uint32_t modbus_bridge_rs485_count(void);
 uint8_t  modbus_bridge_get_baud_idx(void);
+void     modbus_bridge_set_baud(uint8_t idx);
 
 /* Send raw Modbus frame (from PC pass-through) */
 void modbus_bridge_send_raw(const uint8_t *data, uint16_t len);

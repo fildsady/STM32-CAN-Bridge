@@ -172,7 +172,7 @@ static uint8_t s_baud_idx = 4;
 
 uint8_t modbus_bridge_get_baud_idx(void) { return s_baud_idx; }
 
-static void set_usart1_baud(uint8_t idx) {
+void modbus_bridge_set_baud(uint8_t idx) {
     if (idx >= BAUD_COUNT) return;
     s_baud_idx = idx;
     LL_USART_Disable(USART1);
@@ -187,7 +187,7 @@ void modbus_bridge_relay(void) {
         if (s_pc_frame_len >= 4 && s_pc_dma_buf[0] == 0xFE && s_pc_dma_buf[1] == 0xFE) {
             uint8_t cmd = s_pc_dma_buf[2];
             uint8_t val = s_pc_dma_buf[3];
-            if (cmd == 0x01) { set_usart1_baud(val); eeprom_write_u8(CFG_KEY_MB_BAUD, val); }
+            if (cmd == 0x01) { modbus_bridge_set_baud(val); eeprom_write_u8(CFG_KEY_MB_BAUD, val); }
             if (cmd == 0x02) { can_bridge_set_baud(val); eeprom_write_u8(CFG_KEY_CAN_BAUD, val); }
             if (cmd == 0x10) {
                 fault_entry_t faults[50];
@@ -240,7 +240,7 @@ void modbus_bridge_poll(void) {
         if (len >= 3 && frame[0] == 0xFE && frame[1] == 0xFE) {
             uint8_t cmd = frame[2];
             uint8_t val = len >= 4 ? frame[3] : 0;
-            if (cmd == 0x01) { set_usart1_baud(val); eeprom_write_u8(CFG_KEY_MB_BAUD, val); }
+            if (cmd == 0x01) { modbus_bridge_set_baud(val); eeprom_write_u8(CFG_KEY_MB_BAUD, val); }
             if (cmd == 0x02) { can_bridge_set_baud(val); eeprom_write_u8(CFG_KEY_CAN_BAUD, val); }
             if (cmd == 0x10) {
                 fault_entry_t faults[50];

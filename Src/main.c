@@ -80,10 +80,10 @@ static void task_bridge(void *pv) {
     eeprom_init();
     uint8_t mb_idx = eeprom_read_u8(CFG_KEY_MB_BAUD, 4);
     uint8_t can_idx = eeprom_read_u8(CFG_KEY_CAN_BAUD, 2);
-    static const uint32_t mb_bauds[] = {9600,19200,38400,57600,115200,230400,460800};
     uart_init(921600);
     can_bridge_init(can_idx);
-    modbus_bridge_init(mb_idx < 7 ? mb_bauds[mb_idx] : 115200);
+    modbus_bridge_init(115200);
+    modbus_bridge_set_baud(mb_idx);
 
     /* Show saved config on OLED */
     char dbg[32];
