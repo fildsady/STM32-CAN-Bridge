@@ -104,6 +104,7 @@ static void write_entry(uint8_t key, const uint8_t *data, uint8_t len) {
         fault_entry_t faults[50];
         uint16_t fc = eeprom_read_faults(faults, 50);
 
+        __disable_irq();
         flash_unlock();
         flash_erase_sector3();
 
@@ -137,15 +138,18 @@ static void write_entry(uint8_t key, const uint8_t *data, uint8_t len) {
         }
 
         flash_lock();
+        __enable_irq();
     }
 
-    /* Write new entry */
+    /* Write new entry — disable interrupts during flash write */
+    __disable_irq();
     flash_unlock();
     uint8_t hdr[3] = { ENTRY_MAGIC, key, len };
     flash_write_bytes(FLASH_SECTOR_ADDR + s_write_offset, hdr, 3);
     if (len > 0)
         flash_write_bytes(FLASH_SECTOR_ADDR + s_write_offset + 3, data, len);
     flash_lock();
+    __enable_irq();
 
     s_write_offset += needed;
 }
