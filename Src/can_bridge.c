@@ -125,6 +125,7 @@ void CAN1_RX0_IRQHandler(void) {
 
 bool can_bridge_send(uint32_t id, const uint8_t *data, uint8_t dlc) {
     if (dlc > 8) dlc = 8;
+
     uint32_t tsr = CAN1->TSR;
     uint8_t mb;
     if (tsr & CAN_TSR_TME0) mb = 0;
