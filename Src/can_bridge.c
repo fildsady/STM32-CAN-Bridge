@@ -18,7 +18,7 @@ static volatile uint32_t s_rx_count = 0;
 static volatile uint32_t s_err_count = 0;
 
 /* RX ring buffer (ISR → task) */
-#define RX_RING_SIZE 16
+#define RX_RING_SIZE 64
 typedef struct {
     uint32_t id;
     uint8_t  dlc;
@@ -29,7 +29,7 @@ static volatile can_frame_t s_rx_ring[RX_RING_SIZE];
 static volatile uint8_t s_rx_ring_head = 0;
 static volatile uint8_t s_rx_ring_tail = 0;
 
-/* Baud rate prescaler table (APB1 = 45MHz, 15 TQ per bit) */
+/* Baud rate prescaler table (APB1 = 45MHz, 15 TQ, SP=73.3% for can2040 compat) */
 static const struct { uint16_t prescaler; uint32_t baud; } s_baud_table[] = {
     { 150, 20000   },   /* 0: 20k */
     {  60, 50000   },   /* 1: 50k */
@@ -49,7 +49,7 @@ void can_bridge_set_baud(uint8_t idx) {
     /* Re-init CAN with new baud */
     CAN1->MCR |= CAN_MCR_INRQ;
     while (!(CAN1->MSR & CAN_MSR_INAK)) {}
-    CAN1->BTR = ((1 - 1) << 24) | ((2 - 1) << 20) | ((12 - 1) << 16) |
+    CAN1->BTR = ((1 - 1) << 24) | ((4 - 1) << 20) | ((10 - 1) << 16) |
                 (s_baud_table[idx].prescaler - 1);
     CAN1->MCR &= ~CAN_MCR_INRQ;
     while (CAN1->MSR & CAN_MSR_INAK) {}
@@ -76,8 +76,9 @@ void can_bridge_init(uint8_t baud_idx) {
     CAN1->MCR &= ~CAN_MCR_SLEEP;
     CAN1->MCR |= CAN_MCR_NART | CAN_MCR_ABOM | CAN_MCR_AWUM;
 
-    CAN1->BTR = ((1 - 1) << 24) | ((2 - 1) << 20) | ((12 - 1) << 16) |
-                (s_baud_table[baud_idx].prescaler - 1);
+    CAN1->BTR = ((1 - 1) << 24) | ((4 - 1) << 20) | ((10 - 1) << 16) |
+                (s_baud_table[baud_idx].prescaler - 1)
+                ;
 
     CAN1->FMR |= CAN_FMR_FINIT;
     CAN1->FA1R &= ~(1 << 0);
@@ -181,3 +182,34 @@ void can_bridge_poll(void) {
 uint32_t can_bridge_tx_count(void)  { return s_tx_count; }
 uint32_t can_bridge_rx_count(void)  { return s_rx_count; }
 uint32_t can_bridge_err_count(void) { return s_err_count; }
+uint32_t can_bridge_esr(void)       { return CAN1->ESR; }
+
+uint8_t can_bridge_loopback_test(void) {
+    /* Disable CAN, test transceiver with GPIO bit-bang */
+    CAN1->MCR |= CAN_MCR_INRQ;
+    while (!(CAN1->MSR & CAN_MSR_INAK)) {}
+    RCC->APB1ENR &= ~RCC_APB1ENR_CAN1EN;
+
+    /* PA12=output (TX), PA11=input (RX) */
+    LL_GPIO_SetPinMode(GPIOA, LL_GPIO_PIN_12, LL_GPIO_MODE_OUTPUT);
+    LL_GPIO_SetPinMode(GPIOA, LL_GPIO_PIN_11, LL_GPIO_MODE_INPUT);
+    LL_GPIO_SetPinPull(GPIOA, LL_GPIO_PIN_11, LL_GPIO_PULL_UP);
+
+    uint8_t result = 0;
+
+    /* Test 1: TX=HIGH (recessive) → RX should be HIGH */
+    LL_GPIO_SetOutputPin(GPIOA, LL_GPIO_PIN_12);
+    for (volatile int i = 0; i < 10000; i++) {}
+    if (LL_GPIO_IsInputPinSet(GPIOA, LL_GPIO_PIN_11)) result |= 0x01;
+
+    /* Test 2: TX=LOW (dominant) → RX should be LOW */
+    LL_GPIO_ResetOutputPin(GPIOA, LL_GPIO_PIN_12);
+    for (volatile int i = 0; i < 10000; i++) {}
+    if (!LL_GPIO_IsInputPinSet(GPIOA, LL_GPIO_PIN_11)) result |= 0x02;
+
+    /* Restore TX HIGH */
+    LL_GPIO_SetOutputPin(GPIOA, LL_GPIO_PIN_12);
+
+    /* Result: 0x03 = PASS, 0x01 = RX stuck HIGH, 0x02 = RX stuck LOW, 0x00 = inverted */
+    return result;
+}

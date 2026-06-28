@@ -21,3 +21,5 @@ uint8_t can_bridge_get_baud_idx(void);
 uint32_t can_bridge_tx_count(void);
 uint32_t can_bridge_rx_count(void);
 uint32_t can_bridge_err_count(void);
+uint32_t can_bridge_esr(void);
+uint8_t can_bridge_loopback_test(void);

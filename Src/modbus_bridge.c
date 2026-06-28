@@ -155,7 +155,6 @@ void modbus_bridge_usart2_idle(void) {
     s_pc_frame_len = BUF_SIZE - LL_DMA_GetDataLength(DMA1, LL_DMA_STREAM_5);
     if (s_pc_frame_len > 0) {
         s_pc_frame_ready = true;
-        s_pc_frames++;
     }
     /* Reset DMA for next frame */
     LL_DMA_SetMemoryAddress(DMA1, LL_DMA_STREAM_5, (uint32_t)s_pc_dma_buf);

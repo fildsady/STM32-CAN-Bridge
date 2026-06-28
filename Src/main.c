@@ -85,14 +85,25 @@ static void task_bridge(void *pv) {
     modbus_bridge_init(115200);
     modbus_bridge_set_baud(mb_idx);
 
-    /* Show saved config on OLED */
+    /* Transceiver loopback test before CAN init */
+    uint8_t lb = can_bridge_loopback_test();
+
+    /* Re-init CAN after test */
+    can_bridge_init(can_idx);
+
+    /* Show result on OLED */
     char dbg[32];
     SSD1306_Clear();
-    snprintf(dbg, sizeof(dbg), "MB:%d CAN:%d", mb_idx, can_idx);
+    snprintf(dbg, sizeof(dbg), "XCVR test: 0x%02X", lb);
     SSD1306_DrawString(0, 0, dbg, &Font_6x8, 1);
-    SSD1306_DrawString(0, 12, "Config loaded", &Font_6x8, 1);
+    SSD1306_DrawString(0, 12, lb == 0x03 ? "PASS" :
+                               lb == 0x01 ? "RX stuck HIGH" :
+                               lb == 0x02 ? "RX stuck LOW" :
+                               lb == 0x00 ? "INVERTED?!" : "FAIL", &Font_6x8, 1);
+    snprintf(dbg, sizeof(dbg), "MB:%d CAN:%d", mb_idx, can_idx);
+    SSD1306_DrawString(0, 24, dbg, &Font_6x8, 1);
     SSD1306_UpdateScreen();
-    vTaskDelay(pdMS_TO_TICKS(2000));
+    vTaskDelay(pdMS_TO_TICKS(3000));
     g_boot_debug = false;
 
     for (;;) {
@@ -137,6 +148,14 @@ static void task_oled(void *pv) {
                      (unsigned long)modbus_bridge_rs485_count());
             SSD1306_DrawString(0, 32, buf, &Font_6x8, 1);
 
+            uint32_t esr = can_bridge_esr();
+            uint8_t tec = (esr >> 16) & 0xFF;
+            uint8_t rec = (esr >> 24) & 0xFF;
+            uint8_t lec = (esr >> 4) & 0x07;
+            snprintf(buf, sizeof(buf), "T:%d R:%d L:%d E:%lu",
+                     tec, rec, lec, (unsigned long)can_bridge_err_count());
+            SSD1306_DrawString(0, 44, buf, &Font_6x8, 1);
+
         } else {
             snprintf(buf, sizeof(buf), "PC>485: %lu", (unsigned long)modbus_bridge_pc_count());
             SSD1306_DrawString(0, 20, buf, &Font_6x8, 1);
@@ -150,8 +169,7 @@ static void task_oled(void *pv) {
         uint8_t mbi = modbus_bridge_get_baud_idx();
         uint8_t cbi = can_bridge_get_baud_idx();
         snprintf(buf, sizeof(buf), "MB:%s CAN:%s", mbi < 7 ? mbaud[mbi] : "?", cbi < 6 ? cbaud[cbi] : "?");
-        SSD1306_DrawString(0, 44, buf, &Font_6x8, 1);
-        SSD1306_DrawString(0, 56, "PC:921k  BTN=mode", &Font_6x8, 1);
+        SSD1306_DrawString(0, 56, buf, &Font_6x8, 1);
 
         LL_GPIO_TogglePin(GPIOA, LL_GPIO_PIN_5);
         SSD1306_UpdateScreen();
