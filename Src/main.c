@@ -31,6 +31,7 @@
 #include <string.h>
 
 volatile bool g_gateway_mode = true;
+volatile bool g_boot_debug = true;
 
 void SystemClock_Config(void) {
     LL_RCC_HSE_Enable();
@@ -83,9 +84,16 @@ static void task_bridge(void *pv) {
     uart_init(921600);
     can_bridge_init(can_idx);
     modbus_bridge_init(mb_idx < 7 ? mb_bauds[mb_idx] : 115200);
-    /* Boot count */
-    uint32_t bc = eeprom_read_boot_count() + 1;
-    eeprom_write_u8(CFG_KEY_BOOT_COUNT, 0); /* placeholder — real boot count in compact */
+
+    /* Show saved config on OLED for 2 sec */
+    char dbg[32];
+    SSD1306_Clear();
+    snprintf(dbg, sizeof(dbg), "MB:%d CAN:%d", mb_idx, can_idx);
+    SSD1306_DrawString(0, 0, dbg, &Font_6x8, 1);
+    SSD1306_DrawString(0, 12, "Config loaded", &Font_6x8, 1);
+    SSD1306_UpdateScreen();
+    vTaskDelay(pdMS_TO_TICKS(2000));
+    g_boot_debug = false;
 
     for (;;) {
         if (g_gateway_mode) {
@@ -102,6 +110,8 @@ static void task_oled(void *pv) {
     (void)pv;
     char buf[22];
     bool last_btn = true;
+
+    while (g_boot_debug) vTaskDelay(pdMS_TO_TICKS(100));
 
     for (;;) {
         /* Button debounce — PC13 active low */

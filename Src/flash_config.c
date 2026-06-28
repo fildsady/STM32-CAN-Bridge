@@ -82,6 +82,17 @@ static bool entry_valid(uint32_t offset) {
 
 /* ── Init: find write offset ─────────────────────────────────────── */
 void eeprom_init(void) {
+    /* Check if sector is blank (first boot or corrupted) */
+    uint8_t first = *(volatile uint8_t *)FLASH_SECTOR_ADDR;
+    if (first != 0xFF && first != ENTRY_MAGIC) {
+        /* Sector not blank and no valid entry — erase it */
+        __disable_irq();
+        flash_unlock();
+        flash_erase_sector3();
+        flash_lock();
+        __enable_irq();
+    }
+
     s_write_offset = 0;
     while (entry_valid(s_write_offset)) {
         const entry_t *e = entry_at(s_write_offset);
