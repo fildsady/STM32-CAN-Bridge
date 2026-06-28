@@ -197,6 +197,15 @@ void modbus_bridge_relay(void) {
                 memcpy(&pkt[4], faults, fc * sizeof(fault_entry_t));
                 uart_write(pkt, 4 + fc * sizeof(fault_entry_t));
             }
+            if (cmd == 0x11) {
+                fault_entry_t f = {0};
+                f.type = FAULT_ASSERT;
+                f.pc = 0xDEADBEEF;
+                f.lr = 0xCAFEBABE;
+                f.uptime = xTaskGetTickCount() / configTICK_RATE_HZ;
+                f.cfsr = 0;
+                eeprom_write_fault(&f);
+            }
             s_pc_frame_ready = false;
         }
     }
@@ -249,6 +258,15 @@ void modbus_bridge_poll(void) {
                 pkt[0] = 0xFE; pkt[1] = 0xFE; pkt[2] = 0x10; pkt[3] = (uint8_t)fc;
                 memcpy(&pkt[4], faults, fc * sizeof(fault_entry_t));
                 uart_write(pkt, 4 + fc * sizeof(fault_entry_t));
+            }
+            if (cmd == 0x11) {
+                fault_entry_t f = {0};
+                f.type = FAULT_ASSERT;
+                f.pc = 0xDEADBEEF;
+                f.lr = 0xCAFEBABE;
+                f.uptime = xTaskGetTickCount() / configTICK_RATE_HZ;
+                f.cfsr = 0;
+                eeprom_write_fault(&f);
             }
             s_pc_frame_ready = false;
             return;
