@@ -85,7 +85,7 @@ static void task_bridge(void *pv) {
     can_bridge_init(can_idx);
     modbus_bridge_init(mb_idx < 7 ? mb_bauds[mb_idx] : 115200);
 
-    /* Show saved config on OLED for 2 sec */
+    /* Show saved config on OLED */
     char dbg[32];
     SSD1306_Clear();
     snprintf(dbg, sizeof(dbg), "MB:%d CAN:%d", mb_idx, can_idx);
